@@ -1,0 +1,66 @@
+services:
+  mongodb:
+    image: mongo
+    profiles:
+      - prod
+      - dev
+    restart: always
+    container_name: mongodb-cv-builder
+    environment:
+      MONGO_INIT_DB_ROOT_USERNAME: cv_builder_user
+      MONGO_INIT_DB_ROOT_PASSWORD: admin
+      MONGO_INIT_DB_DATABASE: cv_builder
+    ports:
+      - 27017:27017
+    volumes:
+      - ./mongodb_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongo', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cv-builder-network
+
+  redis:
+    image: redis:7
+    profiles:
+      - prod
+      - dev
+    restart: always
+    container_name: redis-cv-builder
+    ports:
+      - 6379:6379
+    volumes:
+      - redis_data:/data
+    networks:
+      - cv-builder-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo-express:
+    image: mongo-express
+    profiles:
+      - dev
+    restart: always
+    container_name: mongo-express-cv-builder
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://cv_builder_user:admin@mongodb-cv-builder:27017/
+      ME_CONFIG_BASICAUTH: false
+    ports:
+      - 8081:8081
+    depends_on:
+      - mongodb
+    networks:
+      - cv-builder-network
+
+networks:
+  cv-builder-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  redis_data:
