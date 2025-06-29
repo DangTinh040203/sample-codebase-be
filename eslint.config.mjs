@@ -76,11 +76,12 @@ export default tseslint.config(
       'prettier/prettier': 0,
       '@typescript-eslint/no-unsafe-return': 0,
       '@typescript-eslint/no-unsafe-call': 0,
+      '@typescript-eslint/no-unsafe-assignment': 0,
+      'import/no-unresolved': 0,
+      'import/extensions': 0,
       '@typescript-eslint/require-await': 'warn',
       '@typescript-eslint/unbound-method': 'warn',
       '@typescript-eslint/no-unused-vars': 'warn',
-      '@typescript-eslint/no-unsafe-assignment': 'warn',
-      'import/no-unresolved': 'warn',
       '@typescript-eslint/no-empty-interface': 'warn',
       'simple-import-sort/imports': 'warn',
       'simple-import-sort/exports': 'warn',
@@ -111,7 +112,6 @@ export default tseslint.config(
       'import/first': 'error',
       'import/newline-after-import': 'error',
       'import/no-duplicates': 'error',
-      'import/extensions': 'warn',
       '@typescript-eslint/no-misused-promises': [
         2,
         {

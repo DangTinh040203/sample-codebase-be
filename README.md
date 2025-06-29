@@ -28,6 +28,10 @@
 ## Project setup
 
 ```bash
+$ docker compose --profile dev up -d
+```
+
+```bash
 $ pnpm install
 ```
 
