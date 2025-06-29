@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 
 import { AppModule } from '@/app.module';
-import { Env } from '@/constants';
+import { Env } from '@/common/constants';
 
 class BootstrapApplication {
   app: INestApplication;

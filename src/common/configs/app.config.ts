@@ -1,7 +1,7 @@
 import { ConfigModule } from '@nestjs/config';
 
-import { validationSchema } from '@/configs/env.config';
-import { MongooseConfig } from '@/configs/mongoose.config';
+import { validationSchema } from '@/common/configs/env.config';
+import { MongooseConfig } from '@/common/configs/mongoose.config';
 
 const envFilePath =
   process.env.NODE_ENV === 'production' ? '.env.prod' : '.env.local';

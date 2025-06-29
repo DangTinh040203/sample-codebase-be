@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { type ConfigService } from '@nestjs/config';
 import { type Connection, ConnectionStates } from 'mongoose';
 
-import { Env } from '@/constants';
+import { Env } from '@/common/constants';
 
 export const databaseConnectionFactory = (config: ConfigService) => {
   const nodeEnv = config.get<string>(Env.NODE_ENV) ?? 'development';

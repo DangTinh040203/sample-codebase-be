@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { databaseConnectionFactory } from '@/factories/database-connection.factory';
+import { databaseConnectionFactory } from '@/common/factories/database-connection.factory';
 
 export const MongooseConfig = MongooseModule.forRootAsync({
   inject: [ConfigService],
