@@ -2,6 +2,7 @@ import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 
 import { AuthsService } from '@/auths/auths.service';
 import { Public } from '@/auths/decorators/public.decorator';
+import { ResendDto } from '@/auths/dto/resend-otp.dto';
 import { SignInWithCredentialsDto } from '@/auths/dto/signin-with-credentials.dto';
 import { SignUpWithCredentialsDto } from '@/auths/dto/signup-with-credentials.dto';
 import { VerifyOtpDto } from '@/auths/dto/verify-otp.dto';
@@ -27,6 +28,12 @@ export class AuthsController {
   @Post('verify-otp')
   async verifyOtp(@Body() dto: VerifyOtpDto) {
     return await this.authsService.verifyOtp(dto);
+  }
+
+  @Public()
+  @Post('resend-otp')
+  async resendOtp(@Body() dto: ResendDto) {
+    return await this.authsService.resendOtp(dto.email);
   }
 
   @UseGuards(JwtAuthGuard)

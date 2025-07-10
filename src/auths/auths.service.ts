@@ -122,6 +122,49 @@ export class AuthsService {
     }
   }
 
+  async resendOtp(email: string) {
+    const account = await this.accountsService.findByEmail(email);
+    if (!account) throw new NotFoundException(['Account not found']);
+    if (account.isVerified)
+      throw new ConflictException(['Account already verified']);
+
+    // 2. (Optional) Prevent spam: cooldown (uncomment to use)
+    const COOL_DOWN_SECONDS = 60;
+    const coolDownKey = `resetOtpCoolDown:${email}`;
+    const coolDown = await this.cacheManager.get(coolDownKey);
+    if (coolDown)
+      throw new ConflictException(['Please wait before requesting a new OTP.']);
+    await this.cacheManager.set(coolDownKey, 1, COOL_DOWN_SECONDS);
+
+    // 3. Remove old OTP and failed attempt counter
+    const cacheKey = GenerateCacheKeys.userOtp(email);
+    const failedKey = GenerateCacheKeys.otpFailed(email);
+    await Promise.all([
+      this.cacheManager.del(cacheKey),
+      this.userOtpModel.deleteOne({ email }),
+      this.cacheManager.del(failedKey),
+    ]);
+
+    // 4. Generate new OTP, save to cache & DB (TTL = 60s)
+    const otp = generateSecureOtp();
+    Logger.log(otp, 'AuthService:resend-otp');
+    const ttl = 60; // 60 seconds
+    const expiresAt = new Date(Date.now() + ttl * 1000);
+    await Promise.all([
+      this.cacheManager.set(cacheKey, otp, ttl),
+      this.userOtpModel.create({ email, otp, expiresAt }),
+    ]);
+
+    // 5. Send OTP email
+    await this.emailService.sendEmail(
+      email,
+      'Your OTP code',
+      `Hello!\n\nYour OTP code is: ${otp}\n\nThis code is valid for 60 seconds.\n\nThanks for using our service.`,
+    );
+
+    Logger.log(`Resent OTP to ${email}`);
+  }
+
   async signInWithCredentials(dto: SignInWithCredentialsDto) {}
 
   async signOut() {}
