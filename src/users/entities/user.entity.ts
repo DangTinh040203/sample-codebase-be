@@ -22,7 +22,7 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.pre<UserDocument>('save', function (next) {
   if (this.isModified('displayName')) {
-    this.slug = slugify(this.displayName as string, {
+    this.slug = slugify(this.displayName, {
       lower: true,
       strict: true,
     });

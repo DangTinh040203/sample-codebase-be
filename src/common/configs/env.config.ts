@@ -30,6 +30,7 @@ export const validationSchema = Joi.object({
 
   [Env.REDIS_HOST]: Joi.string(),
   [Env.REDIS_PORT]: Joi.number(),
+  [Env.REDIS_NAMESPACE]: Joi.number().default(0),
 
   [Env.FRONT_END_ORIGIN]: Joi.string().uri(),
 });
