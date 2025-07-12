@@ -16,4 +16,9 @@ export class UsersService {
   async findByEmail(email: string) {
     return await this.userModel.findOne({ email }).lean();
   }
+
+  async createUser(user: Omit<User, 'slug'>) {
+    const newUser = await this.userModel.create(user);
+    return newUser.toObject();
+  }
 }

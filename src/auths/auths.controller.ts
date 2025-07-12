@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
 
 import { AuthsService } from '@/auths/auths.service';
 import { Public } from '@/auths/decorators/public.decorator';
@@ -7,6 +7,8 @@ import { SignInWithCredentialsDto } from '@/auths/dto/signin-with-credentials.dt
 import { SignUpWithCredentialsDto } from '@/auths/dto/signup-with-credentials.dto';
 import { VerifyOtpDto } from '@/auths/dto/verify-otp.dto';
 import { JwtAuthGuard } from '@/auths/guards/jwt-auth.guard';
+import { JwtAuthGuardRefreshJWT } from '@/auths/guards/refresh-jwt-auth.guard';
+import { CustomRequest } from '@/common/@types';
 
 @Controller('auth')
 export class AuthsController {
@@ -42,8 +44,9 @@ export class AuthsController {
     return await this.authsService.signOut();
   }
 
+  @UseGuards(JwtAuthGuardRefreshJWT)
   @Post('refresh-token')
-  async refreshToken() {
-    return await this.authsService.refreshToken();
+  async refreshToken(@Request() req: CustomRequest) {
+    return await this.authsService.refreshToken(req.user);
   }
 }

@@ -6,26 +6,37 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
-import { hash } from 'bcrypt';
+import { compare, hash } from 'bcrypt';
 import { Model } from 'mongoose';
 
 import { AccountsService } from '@/accounts/accounts.service';
 import { SignInWithCredentialsDto } from '@/auths/dto/signin-with-credentials.dto';
 import { SignUpWithCredentialsDto } from '@/auths/dto/signup-with-credentials.dto';
 import { VerifyOtpDto } from '@/auths/dto/verify-otp.dto';
+import { KeyToken } from '@/auths/entities/key-token.entity';
 import { UserOtp } from '@/auths/entities/user-otp.entity';
+import { JwtPayload } from '@/common/@types';
+import { Env } from '@/common/constants';
 import { GenerateCacheKeys } from '@/common/utils/generateCacheKeys';
 import { generateSecureOtp } from '@/common/utils/generateSecureOtp';
 import { EmailsService } from '@/emails/emails.service';
+import { UsersService } from '@/users/users.service';
 
 @Injectable()
 export class AuthsService {
   constructor(
     @InjectModel(UserOtp.name) private readonly userOtpModel: Model<UserOtp>,
+    @InjectModel(KeyToken.name) private readonly keyTokenModel: Model<KeyToken>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+
     private readonly emailService: EmailsService,
     private readonly accountsService: AccountsService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    private readonly usersService: UsersService,
   ) {}
 
   async signUpWithCredentials({ email, password }: SignUpWithCredentialsDto) {
@@ -34,16 +45,13 @@ export class AuthsService {
       throw new ConflictException(['Email already exists']);
     }
 
-    // Create a new account
     const SALT = 10;
     const hashedPassword: string = await hash(password, SALT);
     await this.accountsService.createAccount(email, hashedPassword);
 
-    // Create and Send OTP
     const otp = generateSecureOtp();
     const ttl = 6 * 1000;
     const expiresAt = new Date(Date.now() + ttl * 1000);
-
     const cacheKey = GenerateCacheKeys.userOtp(email);
 
     await Promise.all([
@@ -66,11 +74,10 @@ export class AuthsService {
     if (account.isVerified)
       throw new ConflictException(['Account already verified']);
 
-    // 2. Prepare cache keys for OTP and failed attempts
     const cacheKey = GenerateCacheKeys.userOtp(email);
     const failedKey = GenerateCacheKeys.otpFailed(email);
     const MAX_FAILED_ATTEMPTS = 5;
-    const LOCK_TIME_SECONDS = 5 * 60; // 5 mins
+    const LOCK_TIME_SECONDS = 5 * 60;
 
     const failedCount = await this.cacheManager.get<number>(failedKey);
     if (failedCount && failedCount >= MAX_FAILED_ATTEMPTS) {
@@ -79,7 +86,6 @@ export class AuthsService {
       ]);
     }
 
-    // 4. Validate OTP: Try cache first, fall back to database if needed
     let isOtpValid = false;
     let otpExpired = false;
     const cacheOtp = await this.cacheManager.get<string>(cacheKey);
@@ -87,11 +93,11 @@ export class AuthsService {
     if (cacheOtp) {
       isOtpValid = cacheOtp === otp;
     } else {
-      const userOtpDoc = await this.userOtpModel.findOne({ email });
-      if (!userOtpDoc) throw new NotFoundException();
+      const userOtp = await this.userOtpModel.findOne({ email });
+      if (!userOtp) throw new NotFoundException();
 
-      if (userOtpDoc.expiresAt < new Date()) otpExpired = true;
-      isOtpValid = userOtpDoc.otp === otp && !otpExpired;
+      if (userOtp.expiresAt < new Date()) otpExpired = true;
+      isOtpValid = userOtp.otp === otp && !otpExpired;
 
       if (otpExpired) {
         throw new ConflictException([
@@ -111,9 +117,13 @@ export class AuthsService {
         throw new ConflictException(['OTP is invalid']);
       }
 
-      // OTP is valid: verify account, cleanup OTP and reset failed count
-      await this.accountsService.updateByEmail(email, { isVerified: true });
       await Promise.all([
+        this.usersService.createUser({
+          email,
+          displayName: email.split('@')[0],
+          avatar: 'https://github.com/shadcn.png',
+        }),
+        this.accountsService.updateByEmail(email, { isVerified: true }),
         this.cacheManager.del(cacheKey),
         this.userOtpModel.deleteOne({ email }),
         this.cacheManager.del(failedKey),
@@ -128,7 +138,6 @@ export class AuthsService {
     if (account.isVerified)
       throw new ConflictException(['Account already verified']);
 
-    // 2. (Optional) Prevent spam: cooldown (uncomment to use)
     const COOL_DOWN_SECONDS = 60;
     const coolDownKey = `resetOtpCoolDown:${email}`;
     const coolDown = await this.cacheManager.get(coolDownKey);
@@ -136,7 +145,6 @@ export class AuthsService {
       throw new ConflictException(['Please wait before requesting a new OTP.']);
     await this.cacheManager.set(coolDownKey, 1, COOL_DOWN_SECONDS);
 
-    // 3. Remove old OTP and failed attempt counter
     const cacheKey = GenerateCacheKeys.userOtp(email);
     const failedKey = GenerateCacheKeys.otpFailed(email);
     await Promise.all([
@@ -145,17 +153,15 @@ export class AuthsService {
       this.cacheManager.del(failedKey),
     ]);
 
-    // 4. Generate new OTP, save to cache & DB (TTL = 60s)
     const otp = generateSecureOtp();
     Logger.log(otp, 'AuthService:resend-otp');
-    const ttl = 60; // 60 seconds
+    const ttl = 60;
     const expiresAt = new Date(Date.now() + ttl * 1000);
     await Promise.all([
       this.cacheManager.set(cacheKey, otp, ttl),
       this.userOtpModel.create({ email, otp, expiresAt }),
     ]);
 
-    // 5. Send OTP email
     await this.emailService.sendEmail(
       email,
       'Your OTP code',
@@ -165,9 +171,64 @@ export class AuthsService {
     Logger.log(`Resent OTP to ${email}`);
   }
 
-  async signInWithCredentials(dto: SignInWithCredentialsDto) {}
+  async signInWithCredentials({ email, password }: SignInWithCredentialsDto) {
+    const account = await this.accountsService.findByEmail(email);
+    if (!account) throw new NotFoundException(['Account not found']);
+    if (!account.isVerified)
+      throw new ConflictException(['Account is not verified']);
+
+    const isPasswordValid = compare(password, account.password);
+    if (!isPasswordValid) {
+      throw new ConflictException(['Invalid email or password']);
+    }
+
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new NotFoundException(['User not found']);
+    }
+
+    const tokens = await this.tokensGenerator(user._id.toString());
+    return tokens;
+  }
 
   async signOut() {}
 
-  async refreshToken() {}
+  async refreshToken(jwtPayload: JwtPayload) {
+    const tokens = await this.tokensGenerator(jwtPayload._id);
+
+    const SALT = 10;
+    const hashedRefreshToken = await hash(tokens.refreshToken, SALT);
+
+    await this.keyTokenModel.findOneAndUpdate(
+      { userId: jwtPayload._id },
+      { $set: { hashedRefreshToken } },
+      { upsert: true, new: true },
+    );
+
+    return tokens;
+  }
+
+  async tokensGenerator(userId: string) {
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(
+        { _id: userId },
+        {
+          secret: this.configService.get(Env.JWT_SECRET),
+          expiresIn: this.configService.get(Env.JWT_ACCESS_TOKEN_EXPIRES_IN),
+        },
+      ),
+      this.jwtService.signAsync(
+        { _id: userId },
+        {
+          secret: this.configService.get(Env.JWT_SECRET),
+          expiresIn: this.configService.get(Env.JWT_REFRESH_TOKEN_EXPIRES_IN),
+        },
+      ),
+    ]);
+
+    return {
+      accessToken,
+      refreshToken,
+    };
+  }
 }
