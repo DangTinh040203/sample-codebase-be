@@ -1,4 +1,11 @@
-import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Request,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 
 import { AuthsService } from '@/auths/auths.service';
 import { Public } from '@/auths/decorators/public.decorator';
@@ -47,6 +54,11 @@ export class AuthsController {
   @UseGuards(JwtAuthGuardRefreshJWT)
   @Post('refresh-token')
   async refreshToken(@Request() req: CustomRequest) {
-    return await this.authsService.refreshToken(req.user);
+    const refreshToken = req.headers.authorization?.replace('Bearer ', '');
+    if (!refreshToken) {
+      throw new UnauthorizedException(['Refresh token is required']);
+    }
+
+    return await this.authsService.refreshToken(req.user, refreshToken);
   }
 }

@@ -5,11 +5,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
-import { compare, hash } from 'bcrypt';
+import bcrypt, { compare, hash } from 'bcrypt';
 import { Model } from 'mongoose';
 
 import { AccountsService } from '@/accounts/accounts.service';
@@ -20,6 +21,7 @@ import { KeyToken } from '@/auths/entities/key-token.entity';
 import { UserOtp } from '@/auths/entities/user-otp.entity';
 import { JwtPayload } from '@/common/@types';
 import { Env } from '@/common/constants';
+import { convertToObjectId } from '@/common/utils/convertToObjectId.util';
 import { GenerateCacheKeys } from '@/common/utils/generateCacheKeys';
 import { generateSecureOtp } from '@/common/utils/generateSecureOtp';
 import { EmailsService } from '@/emails/emails.service';
@@ -45,9 +47,7 @@ export class AuthsService {
       throw new ConflictException(['Email already exists']);
     }
 
-    const SALT = 10;
-    const hashedPassword: string = await hash(password, SALT);
-    await this.accountsService.createAccount(email, hashedPassword);
+    await this.accountsService.createAccount(email, password);
 
     const otp = generateSecureOtp();
     const ttl = 6 * 1000;
@@ -177,7 +177,7 @@ export class AuthsService {
     if (!account.isVerified)
       throw new ConflictException(['Account is not verified']);
 
-    const isPasswordValid = compare(password, account.password);
+    const isPasswordValid = await bcrypt.compare(password, account.password);
     if (!isPasswordValid) {
       throw new ConflictException(['Invalid email or password']);
     }
@@ -188,20 +188,35 @@ export class AuthsService {
     }
 
     const tokens = await this.tokensGenerator(user._id.toString());
+
+    // Upsert the refresh token in the keyToken collection
+    const SALT = 10;
+    const hashedRefreshToken = await hash(tokens.refreshToken, SALT);
+    await this.keyTokenModel.findOneAndUpdate(
+      { userId: user._id },
+      {
+        $set: { hashedRefreshToken },
+      },
+      { upsert: true, new: true },
+    );
+
     return tokens;
   }
 
   async signOut() {}
 
-  async refreshToken(jwtPayload: JwtPayload) {
+  async refreshToken(jwtPayload: JwtPayload, refreshToken: string) {
     const tokens = await this.tokensGenerator(jwtPayload._id);
 
     const SALT = 10;
     const hashedRefreshToken = await hash(tokens.refreshToken, SALT);
 
-    await this.keyTokenModel.findOneAndUpdate(
-      { userId: jwtPayload._id },
-      { $set: { hashedRefreshToken } },
+    await this.keyTokenModel.updateOne(
+      { userId: convertToObjectId(jwtPayload._id) },
+      {
+        $set: { hashedRefreshToken },
+        $push: { refreshTokensUsed: refreshToken },
+      },
       { upsert: true, new: true },
     );
 
@@ -230,5 +245,23 @@ export class AuthsService {
       accessToken,
       refreshToken,
     };
+  }
+
+  async isValidRefreshToken(userId: string, refreshToken: string) {
+    const keyToken = await this.keyTokenModel.findOne({
+      userId: convertToObjectId(userId),
+    });
+
+    if (!keyToken) {
+      throw new NotFoundException(['User not found']);
+    }
+
+    const isUsed = keyToken.refreshTokensUsed.includes(refreshToken);
+    if (isUsed) {
+      throw new UnauthorizedException(['Refresh token has been used']);
+    }
+
+    const isValid = await compare(refreshToken, keyToken.hashedRefreshToken);
+    return isValid;
   }
 }
