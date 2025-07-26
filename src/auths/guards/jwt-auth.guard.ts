@@ -15,9 +15,11 @@ export class JwtAuthGuard extends AuthGuard(StrategiesTypes.JWT) {
       'isPublic',
       context.getHandler(),
     );
+
     if (isPublic) {
       return true;
     }
+
     return super.canActivate(context);
   }
 }

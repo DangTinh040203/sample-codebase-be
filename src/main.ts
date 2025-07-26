@@ -1,4 +1,9 @@
-import { type INestApplication, Logger, ValidationPipe } from '@nestjs/common';
+import {
+  type INestApplication,
+  Logger,
+  RequestMethod,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
@@ -14,6 +19,7 @@ class BootstrapApplication {
 
   async run() {
     this.app = await NestFactory.create(AppModule);
+    this.app.setGlobalPrefix('v1');
 
     this.configService = this.app.get(ConfigService);
     const port = this.configService.get<number>(Env.PORT) || 3000;
@@ -21,7 +27,10 @@ class BootstrapApplication {
     this.setupMiddleware();
 
     await this.app.listen(port);
-    Logger.log(`Server running on http://localhost:${port}`);
+    Logger.log(
+      `Server running on http://localhost:${port}`,
+      'BootstrapApplication',
+    );
   }
 
   private setupMiddleware() {

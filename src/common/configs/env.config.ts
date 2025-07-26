@@ -33,4 +33,5 @@ export const validationSchema = Joi.object({
   [Env.REDIS_NAMESPACE]: Joi.number().default(0),
 
   [Env.FRONT_END_ORIGIN]: Joi.string().uri(),
+  [Env.IMAGE_BASE_URL]: Joi.string().uri(),
 });

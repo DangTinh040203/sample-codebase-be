@@ -56,7 +56,7 @@ export class AuthsController {
   async refreshToken(@Request() req: CustomRequest) {
     const refreshToken = req.headers.authorization?.replace('Bearer ', '');
     if (!refreshToken) {
-      throw new UnauthorizedException(['Refresh token is required']);
+      throw new UnauthorizedException('Refresh token is required');
     }
 
     return await this.authsService.refreshToken(req.user, refreshToken);

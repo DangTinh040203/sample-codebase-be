@@ -44,7 +44,7 @@ export class AuthsService {
   async signUpWithCredentials({ email, password }: SignUpWithCredentialsDto) {
     const account = await this.accountsService.findByEmail(email);
     if (account) {
-      throw new ConflictException(['Email already exists']);
+      throw new ConflictException('Email already exists');
     }
 
     await this.accountsService.createAccount(email, password);
@@ -70,9 +70,9 @@ export class AuthsService {
 
   async verifyOtp({ email, otp }: VerifyOtpDto) {
     const account = await this.accountsService.findByEmail(email);
-    if (!account) throw new NotFoundException(['Account not found']);
+    if (!account) throw new NotFoundException('Account not found');
     if (account.isVerified)
-      throw new ConflictException(['Account already verified']);
+      throw new ConflictException('Account already verified');
 
     const cacheKey = GenerateCacheKeys.userOtp(email);
     const failedKey = GenerateCacheKeys.otpFailed(email);
@@ -81,9 +81,9 @@ export class AuthsService {
 
     const failedCount = await this.cacheManager.get<number>(failedKey);
     if (failedCount && failedCount >= MAX_FAILED_ATTEMPTS) {
-      throw new ConflictException([
+      throw new ConflictException(
         'Too many failed attempts. Please try again later.',
-      ]);
+      );
     }
 
     let isOtpValid = false;
@@ -100,9 +100,9 @@ export class AuthsService {
       isOtpValid = userOtp.otp === otp && !otpExpired;
 
       if (otpExpired) {
-        throw new ConflictException([
+        throw new ConflictException(
           'OTP has expired. Please request a new one.',
-        ]);
+        );
       }
 
       if (!isOtpValid) {
@@ -114,7 +114,7 @@ export class AuthsService {
         Logger.warn(
           `Invalid OTP for ${email}. Fail count: ${(failedCount || 0) + 1}`,
         );
-        throw new ConflictException(['OTP is invalid']);
+        throw new ConflictException('OTP is invalid');
       }
 
       await Promise.all([
@@ -134,15 +134,15 @@ export class AuthsService {
 
   async resendOtp(email: string) {
     const account = await this.accountsService.findByEmail(email);
-    if (!account) throw new NotFoundException(['Account not found']);
+    if (!account) throw new NotFoundException('Account not found');
     if (account.isVerified)
-      throw new ConflictException(['Account already verified']);
+      throw new ConflictException('Account already verified');
 
     const COOL_DOWN_SECONDS = 60;
     const coolDownKey = `resetOtpCoolDown:${email}`;
     const coolDown = await this.cacheManager.get(coolDownKey);
     if (coolDown)
-      throw new ConflictException(['Please wait before requesting a new OTP.']);
+      throw new ConflictException('Please wait before requesting a new OTP.');
     await this.cacheManager.set(coolDownKey, 1, COOL_DOWN_SECONDS);
 
     const cacheKey = GenerateCacheKeys.userOtp(email);
@@ -173,18 +173,18 @@ export class AuthsService {
 
   async signInWithCredentials({ email, password }: SignInWithCredentialsDto) {
     const account = await this.accountsService.findByEmail(email);
-    if (!account) throw new NotFoundException(['Account not found']);
+    if (!account) throw new NotFoundException('Account not found');
     if (!account.isVerified)
-      throw new ConflictException(['Account is not verified']);
+      throw new ConflictException('Account is not verified');
 
     const isPasswordValid = await bcrypt.compare(password, account.password);
     if (!isPasswordValid) {
-      throw new ConflictException(['Invalid email or password']);
+      throw new ConflictException('Invalid email or password');
     }
 
     const user = await this.usersService.findByEmail(email);
     if (!user) {
-      throw new NotFoundException(['User not found']);
+      throw new NotFoundException('User not found');
     }
 
     const tokens = await this.tokensGenerator(user._id.toString());
@@ -253,12 +253,12 @@ export class AuthsService {
     });
 
     if (!keyToken) {
-      throw new NotFoundException(['User not found']);
+      throw new NotFoundException('User not found');
     }
 
     const isUsed = keyToken.refreshTokensUsed.includes(refreshToken);
     if (isUsed) {
-      throw new UnauthorizedException(['Refresh token has been used']);
+      throw new UnauthorizedException('Refresh token has been used');
     }
 
     const isValid = await compare(refreshToken, keyToken.hashedRefreshToken);

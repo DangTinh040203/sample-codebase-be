@@ -12,7 +12,7 @@ export class AccountsService {
   async createAccount(email: string, password: string) {
     const accountHolder = await this.account.findOne({ email }).lean();
     if (accountHolder) {
-      throw new ConflictException(['Email already exists']);
+      throw new ConflictException('Email already exists');
     }
 
     const SALT = 10;

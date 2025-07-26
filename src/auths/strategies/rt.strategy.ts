@@ -30,15 +30,13 @@ export class RtStrategy extends PassportStrategy(
   async validate(req: Request, payload: JwtPayload) {
     const refreshToken = req.headers.authorization?.replace('Bearer ', '');
     if (!refreshToken) {
-      throw new UnauthorizedException(['Refresh token is required']);
+      throw new UnauthorizedException('Refresh token is required');
     }
 
     const isValid = await this.authService.isValidRefreshToken(
       payload._id,
       refreshToken,
     );
-
-    console.log('🚀 ~ validate ~ isValid:', isValid);
 
     if (!isValid)
       throw new UnauthorizedException('Refresh token invalid or used');
